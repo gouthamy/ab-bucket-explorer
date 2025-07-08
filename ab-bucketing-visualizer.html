@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>A/B Experiment Bucketing Demo</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #fdfdfd;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px;
+    }
+
+    .container {
+      display: flex;
+      gap: 80px;
+      margin-top: 40px;
+      align-items: center;
+    }
+
+    .inputs {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    input {
+      padding: 6px 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+
+    .bucket-bar {
+      position: relative;
+      width: 120px;
+      height: 400px;
+      background: #eaeaea;
+      border: 2px solid #aaa;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .bucket-segment {
+      position: absolute;
+      left: 0;
+      width: 100%;
+      color: #222;
+      font-weight: 900;
+      font-size: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      text-align: center;
+      opacity: 0.7;
+      z-index: 0;
+      border-bottom: 1px solid #fff;
+      transition: opacity 0.5s;
+      pointer-events: none;
+    }
+    .bucket-segment .bucket-range {
+      font-size: 16px;
+      font-weight: 700;
+      margin-top: 2px;
+    }
+    .bucket-bar .dot {
+      z-index: 2;
+      transition: top 1s cubic-bezier(0.23, 1, 0.32, 1);
+      box-shadow: 0 2px 8px rgba(123, 93, 242, 0.2);
+      border: 2px solid #fff;
+    }
+    .bucket-labels {
+      position: absolute;
+      left: 130px;
+      top: 0;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .legend {
+      margin-top: 16px;
+      display: flex;
+      gap: 10px;
+      font-size: 14px;
+      align-items: center;
+    }
+    .legend span {
+      padding: 4px 14px;
+      border-radius: 6px;
+      color: #222;
+      font-weight: 900;
+      border: 2px solid #bbb;
+      min-width: 80px;
+      text-align: center;
+      font-size: 18px;
+    }
+
+    .dot {
+      position: absolute;
+      left: 45px;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: #7b5df2;
+      transition: top 1s ease;
+      text-align: center;
+      color: white;
+      line-height: 30px;
+      font-size: 14px;
+    }
+
+    button {
+      margin-top: 20px;
+      padding: 10px 16px;
+      background: #7b5df2;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .variant-info {
+      margin-top: 20px;
+      font-size: 16px;
+      font-weight: bold;
+    }
+
+    .history-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      font-size: 15px;
+    }
+    .history-table th, .history-table td {
+      padding: 8px 12px;
+      border-bottom: 1px solid #e0e0e0;
+      text-align: left;
+    }
+    .variant-badge {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 12px;
+      font-weight: bold;
+      color: #222;
+    }
+    .variant-a { background: #ffd600; }
+    .variant-b { background: #00e676; }
+    .variant-control { background: #ff1744; color: #fff; }
+    .history-table tr:first-child { background: #f3f3ff; }
+  </style>
+</head>
+<body>
+
+  <h1 style="
+    font-size: 2.7rem;
+    font-weight: 900;
+    color: #6c47e6;
+    letter-spacing: 1px;
+    margin-bottom: 0.2em;
+    text-shadow: 0 2px 12px #e6e6fa80, 0 1px 0 #fff;
+    text-align: center;">
+    A/B Experimentation
+  </h1>
+
+  <div class="container">
+    <div class="inputs">
+      <input type="text" id="userId" placeholder="User ID" />
+      <input type="text" id="experiment" placeholder="Experiment Name" />
+      <button onclick="simulate()">Simulate</button>
+      <div class="variant-info" id="result"></div>
+      <pre id="hashLog" style="background:#222;color:#b5f4a5;padding:12px 16px;border-radius:6px;margin-top:12px;font-size:14px;line-height:1.5;min-width:700px;max-width:700px;overflow-x:auto;display:none;">Hashing steps and assignment log will appear here.</pre>
+      <div id="historyBox" style="background:#f7f7f7;border:1px solid #ccc;border-radius:6px;padding:12px 16px;margin-top:12px;min-width:600px;max-width:600px;font-size:14px;">
+        <b>History</b>
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Experiment</th>
+              <th>Variant</th>
+              <th>Bucket %</th>
+            </tr>
+          </thead>
+          <tbody id="historyList"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="bucket-bar" id="bar">
+      <div class="bucket-segment" style="top:0; height:133.33px; background:#ffd600;">
+        <div>A</div>
+        <div class="bucket-range">0–33%</div>
+      </div>
+      <div class="bucket-segment" style="top:133.33px; height:133.33px; background:#00e676;">
+        <div>B</div>
+        <div class="bucket-range">33–66%</div>
+      </div>
+      <div class="bucket-segment" style="top:266.66px; height:133.34px; background:#ff1744; color:#fff;">
+        <div>Control</div>
+        <div class="bucket-range">66–100%</div>
+      </div>
+      <div class="bucket-labels">
+        <div>0%</div>
+        <div>33%</div>
+        <div>66%</div>
+        <div>100%</div>
+      </div>
+      <div class="dot" id="dot">●</div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span style="background:#ffd600;">A</span>
+    <span style="background:#00e676;">B</span>
+    <span style="background:#ff1744; color:#fff;">Control</span>
+  </div>
+
+  <script>
+    let history = [];
+    function hash(str) {
+      let hash = 0;
+      for (let i = 0; i < str.length; i++) {
+        hash = (hash << 5) - hash + str.charCodeAt(i);
+        hash |= 0; // Convert to 32bit integer
+      }
+      return Math.abs(hash % 100);
+    }
+
+    // Set default dot to Control segment
+    window.onload = function() {
+      const dot = document.getElementById("dot");
+      const segments = document.querySelectorAll('.bucket-segment');
+      const barHeight = 400;
+      const controlStart = 266.66;
+      const controlHeight = 133.34;
+      dot.style.top = `${controlStart + controlHeight/2 - 15}px`;
+      dot.innerText = '●';
+      segments.forEach((seg, idx) => {
+        seg.style.opacity = idx === 2 ? 1 : 0.7;
+        seg.style.boxShadow = idx === 2 ? '0 0 12px 2px #7b5df2' : 'none';
+      });
+      document.getElementById("result").innerText = '';
+    }
+
+    // Show hash log only when simulating
+    function showHashLog() {
+      document.getElementById("hashLog").style.display = "block";
+    }
+
+    function simulate() {
+      showHashLog();
+      const userId = document.getElementById("userId").value;
+      const experiment = document.getElementById("experiment").value;
+      const dot = document.getElementById("dot");
+      const result = document.getElementById("result");
+      const segments = document.querySelectorAll('.bucket-segment');
+      const hashLog = document.getElementById("hashLog");
+      if (!userId || !experiment) {
+        alert("Please enter both values");
+        return;
+      }
+      // Remove previous highlight
+      segments.forEach(seg => seg.style.opacity = 0.7);
+      // Hash calculation
+      const combined = userId + experiment;
+      let hashVal = 0;
+      for (let i = 0; i < combined.length; i++) {
+        hashVal = (hashVal << 5) - hashVal + combined.charCodeAt(i);
+        hashVal |= 0;
+      }
+      const absHash = Math.abs(hashVal);
+      const bucket = absHash % 100;
+      const barHeight = 400;
+      const top = (bucket / 100) * barHeight;
+      // Prepare log message
+      const logMsg = `hash(\"${userId} + ${experiment}\") = ${absHash} = bucket ${bucket}%`;
+      hashLog.innerText = "";
+      dot.innerText = "";
+      result.innerText = '';
+      dot.style.top = `-15px`;
+      // Typing animation
+      let idx = 0;
+      function typeLog() {
+        if (idx <= logMsg.length) {
+          hashLog.innerText = logMsg.slice(0, idx);
+          idx++;
+          setTimeout(typeLog, 18);
+        } else {
+          // After typing, animate dot and show result
+          setTimeout(() => {
+            dot.innerText = bucket;
+            dot.style.top = `${top - 15}px`;
+            let variant = "";
+            let highlightIndex = 0;
+            if (bucket < 33.33) {
+              variant = "Variant A (0–33%)";
+              highlightIndex = 0;
+            } else if (bucket < 66.66) {
+              variant = "Variant B (33–66%)";
+              highlightIndex = 1;
+            } else {
+              variant = "Control (66–100%)";
+              highlightIndex = 2;
+            }
+            segments[highlightIndex].style.opacity = 1;
+            segments[highlightIndex].style.boxShadow = '0 0 12px 2px #7b5df2';
+            segments.forEach((seg, idx) => {
+              if (idx !== highlightIndex) seg.style.boxShadow = 'none';
+            });
+            result.innerText = `Assigned to: ${variant}`;
+            // Add to history
+            history.unshift({
+              userId,
+              experiment,
+              bucket,
+              variant
+            });
+            if (history.length > 10) history = history.slice(0, 10); // keep last 10
+            // Update history display
+            const historyList = document.getElementById("historyList");
+            historyList.innerHTML = history.map((h, idx) => {
+              let variantClass = h.variant.includes('A') ? 'variant-a' :
+                                 h.variant.includes('B') ? 'variant-b' : 'variant-control';
+              let variantShort = h.variant.includes('A') ? 'A' :
+                                h.variant.includes('B') ? 'B' : 'Control';
+              return `<tr${idx === 0 ? ' style="font-weight:bold; background:#f3f3ff;"' : ''}>
+                <td>${h.userId}</td>
+                <td>${h.experiment}</td>
+                <td><span class="variant-badge ${variantClass}">${variantShort}</span></td>
+                <td>${h.bucket}%</td>
+              </tr>`;
+            }).join('');
+          }, 300);
+        }
+      }
+      typeLog();
+    }
+  </script>
+</body>
+</html>
